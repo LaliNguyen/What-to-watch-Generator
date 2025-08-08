@@ -1,247 +1,220 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global What to Watch</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <style>
-      .loading-spinner {
-        border-right-color: transparent;
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+
+// The main application component.
+const App = () => {
+  // Your TMDb API key.
+  const API_KEY = "24a71141954141554e65756b4f7e27f0";
+
+  // State variables for the app.
+  const [media, setMedia] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [language, setLanguage] = useState('en-US');
+  const [query, setQuery] = useState('');
+
+  // A list of supported language options for the API.
+  const LANGUAGE_OPTIONS = [
+    { code: 'en-US', name: 'English' },
+    { code: 'es-US', name: 'Spanish' },
+    { code: 'de-DE', name: 'German' },
+    { code: 'fr-FR', name: 'French' },
+    { code: 'ja-JP', name: 'Japanese' },
+    { code: 'ko-KR', name: 'Korean' },
+    { code: 'zh-CN', name: 'Chinese' },
+  ];
+
+  // Function to fetch media data from the TMDb API.
+  const fetchData = async (isRandom = false) => {
+    setLoading(true);
+    setError(null);
+
+    let apiUrl = '';
+    const randomPage = Math.floor(Math.random() * 50) + 1; // Get a random page for a more diverse selection.
+
+    try {
+      if (isRandom || !query) {
+        // Fetch a random popular movie or TV show.
+        const type = Math.random() > 0.5 ? 'movie' : 'tv';
+        apiUrl = `https://api.themoviedb.org/3/discover/${type}?api_key=${API_KEY}&language=${language}&sort_by=popularity.desc&page=${randomPage}`;
+      } else {
+        // Search for a specific movie or TV show.
+        apiUrl = `https://api.themoviedb.org/3/search/multi?api_key=${API_KEY}&query=${encodeURIComponent(query)}&language=${language}`;
       }
-    </style>
-</head>
-<body class="bg-gray-100 font-sans">
-    <div id="root"></div>
-    <script type="text/javascript">
-        const AppContext = React.createContext();
 
-        const API_KEY = ""; // Replace with your TMDb API key
-        const BASE_URL = "https://api.themoviedb.org/3";
-        const IMAGE_URL = "https://image.tmdb.org/t/p/w500";
+      const response = await fetch(apiUrl);
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
 
-        const LANGUAGES = [
-            { code: 'en-US', name: 'English' },
-            { code: 'es-ES', name: 'Spanish' },
-            { code: 'fr-FR', name: 'French' },
-            { code: 'de-DE', name: 'German' },
-            { code: 'ja-JP', name: 'Japanese' },
-            { code: 'ko-KR', name: 'Korean' },
-            { code: 'it-IT', name: 'Italian' },
-            { code: 'pt-BR', name: 'Portuguese (Brazil)' },
-            { code: 'ru-RU', name: 'Russian' },
-            { code: 'zh-CN', name: 'Chinese' },
-        ];
+      const data = await response.json();
+      let result = null;
 
-        const AppProvider = ({ children }) => {
-            const [recommendation, setRecommendation] = React.useState(null);
-            const [loading, setLoading] = React.useState(false);
-            const [error, setError] = React.useState(null);
+      if (data.results && data.results.length > 0) {
+        if (isRandom || !query) {
+          // Pick a random item from the results of the popular list.
+          const randomIndex = Math.floor(Math.random() * data.results.length);
+          result = data.results[randomIndex];
+        } else {
+          // For a search query, just take the first result.
+          result = data.results[0];
+        }
+      }
 
-            const getRecommendation = async (query = '', language = 'en-US') => {
-                if (!API_KEY) {
-                    setError("Please provide a TMDb API key in the code.");
-                    return;
-                }
+      if (result) {
+        // Fetch genre data separately for display.
+        const genreType = result.media_type === 'movie' ? 'movie' : 'tv';
+        const genresResponse = await fetch(`https://api.themoviedb.org/3/genre/${genreType}/list?api_key=${API_KEY}&language=${language}`);
+        const genresData = await genresResponse.json();
+        
+        // Map genre IDs to their names.
+        const genreNames = result.genre_ids?.map(id => {
+          const genre = genresData.genres.find(g => g.id === id);
+          return genre ? genre.name : '';
+        }).filter(Boolean);
+        
+        setMedia({ ...result, genres: genreNames });
+      } else {
+        setMedia(null);
+        setError("No results found. Please try another query or randomize again.");
+      }
 
-                setLoading(true);
-                setError(null);
-                setRecommendation(null);
+    } catch (err) {
+      setError(`Failed to fetch data: ${err.message}`);
+      setMedia(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-                let url;
-                if (query.trim() === '') {
-                    // Get random popular movies if no search query
-                    url = `${BASE_URL}/discover/movie?api_key=${API_KEY}&sort_by=popularity.desc&language=${language}`;
-                } else {
-                    // Search for a specific movie or show
-                    url = `${BASE_URL}/search/multi?api_key=${API_KEY}&query=${encodeURIComponent(query)}&language=${language}`;
-                }
+  // Fetch initial random data when the component mounts or language changes.
+  useEffect(() => {
+    fetchData(true);
+  }, [language]);
 
-                try {
-                    const response = await fetch(url);
-                    const data = await response.json();
+  // Handle the button click for fetching new data.
+  const handleRandomize = () => {
+    setQuery('');
+    fetchData(true);
+  };
 
-                    if (data.results && data.results.length > 0) {
-                        const results = data.results.filter(item => item.poster_path);
-                        if (results.length > 0) {
-                            const randomIndex = Math.floor(Math.random() * results.length);
-                            const item = results[randomIndex];
+  // Handle search form submission.
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (query.trim()) {
+      fetchData();
+    }
+  };
 
-                            const detailsUrl = `${BASE_URL}/${item.media_type || 'movie'}/${item.id}?api_key=${API_KEY}&language=${language}`;
-                            const detailsResponse = await fetch(detailsUrl);
-                            const detailsData = await detailsResponse.json();
+  // Handle change in the language selector.
+  const handleLanguageChange = (e) => {
+    setLanguage(e.target.value);
+  };
 
-                            setRecommendation({
-                                title: detailsData.title || detailsData.name,
-                                year: new Date(detailsData.release_date || detailsData.first_air_date).getFullYear(),
-                                summary: detailsData.overview,
-                                poster: `${IMAGE_URL}${detailsData.poster_path}`,
-                                genres: (detailsData.genres || []).map(g => g.name).join(', '),
-                                mediaType: detailsData.media_type || item.media_type
-                            });
-                        } else {
-                            setError("No matching recommendations found. Try a different search!");
-                        }
-                    } else {
-                        setError("No matching recommendations found. Try a different search!");
-                    }
-                } catch (err) {
-                    console.error("Failed to fetch recommendation:", err);
-                    setError("Something went wrong. Please try again later.");
-                } finally {
-                    setLoading(false);
-                }
-            };
+  const getYear = (releaseDate) => {
+    return releaseDate ? new Date(releaseDate).getFullYear() : 'N/A';
+  };
 
-            return (
-                <AppContext.Provider value={{ recommendation, loading, error, getRecommendation, API_KEY }}>
-                    {children}
-                </AppContext.Provider>
-            );
-        };
+  return (
+    <div className="min-h-screen bg-gray-900 text-white p-4 font-sans flex flex-col items-center">
+      <div className="w-full max-w-4xl p-6 bg-gray-800 rounded-xl shadow-lg">
+        <header className="text-center mb-8">
+          <h1 className="text-4xl font-extrabold text-blue-400">What to watch today</h1>
+          <p className="mt-2 text-lg text-gray-300">Discover your next favorite movie or TV show.</p>
+        </header>
 
-        const App = () => {
-            return (
-                <AppProvider>
-                    <div className="min-h-screen bg-gray-100 p-4">
-                        <Header />
-                        <GeneratorForm />
-                        <RecommendationResult />
-                    </div>
-                </AppProvider>
-            );
-        };
+        {/* Search and controls section */}
+        <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4 mb-8">
+          <form onSubmit={handleSearch} className="flex flex-grow w-full sm:w-auto">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search for a title..."
+              className="flex-grow p-3 rounded-l-md border border-gray-600 bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              type="submit"
+              className="p-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-r-md transition-colors duration-200"
+            >
+              Search
+            </button>
+          </form>
 
-        const Header = () => {
-            return (
-                <header className="py-10 text-center">
-                    <h1 className="text-4xl sm:text-5xl font-bold text-gray-800 mb-4">Global What to Watch</h1>
-                    <p className="text-lg text-gray-600">Discover your next favorite movie or TV show from anywhere in the world.</p>
-                </header>
-            );
-        };
+          <select
+            value={language}
+            onChange={handleLanguageChange}
+            className="p-3 rounded-md border border-gray-600 bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
+          >
+            {LANGUAGE_OPTIONS.map(option => (
+              <option key={option.code} value={option.code}>{option.name}</option>
+            ))}
+          </select>
 
-        const GeneratorForm = () => {
-            const { getRecommendation, loading } = React.useContext(AppContext);
-            
-            // This is the new part! We get the language from the browser.
-            const userLanguage = navigator.language.slice(0, 5);
-            
-            // We'll set the initial state to the user's language if it's in our list, otherwise it defaults to English.
-            const defaultLanguage = LANGUAGES.find(lang => lang.code === userLanguage) ? userLanguage : 'en-US';
-            
-            const [query, setQuery] = React.useState('');
-            const [language, setLanguage] = React.useState(defaultLanguage);
+          <button
+            onClick={handleRandomize}
+            className="p-3 w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-md transition-colors duration-200 shadow-md"
+          >
+            Randomize
+          </button>
+        </div>
 
-            const handleSubmit = (e) => {
-                e.preventDefault();
-                getRecommendation(query, language);
-            };
+        {/* Display section for results, loading, or errors */}
+        <div className="min-h-[300px] flex items-center justify-center text-center">
+          {loading && (
+            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div>
+          )}
 
-            const handleRandomize = () => {
-                setQuery(''); // Clear query for a random search
-                getRecommendation('', language);
-            };
+          {error && !loading && (
+            <div className="text-red-400 p-4 bg-red-900 rounded-lg max-w-xl">
+              <p className="font-semibold text-lg">Error:</p>
+              <p>{error}</p>
+              <p className="mt-2 text-sm text-red-300">
+                Please check your API key and network connection.
+              </p>
+            </div>
+          )}
 
-            return (
-                <form onSubmit={handleSubmit} className="bg-white p-6 md:p-8 rounded-2xl shadow-xl w-full max-w-2xl mx-auto mb-8 flex flex-col items-center">
-                    <div className="w-full flex flex-col sm:flex-row gap-4 mb-4">
-                        <input
-                            type="text"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Search for a movie or TV show..."
-                            className="flex-1 p-3 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                        <select
-                            value={language}
-                            onChange={(e) => setLanguage(e.target.value)}
-                            className="p-3 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                        >
-                            {LANGUAGES.map(lang => (
-                                <option key={lang.code} value={lang.code}>{lang.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="flex gap-4">
-                        <button
-                            type="submit"
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:bg-indigo-400"
-                            disabled={loading}
-                        >
-                            {loading ? 'Searching...' : 'Search'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleRandomize}
-                            className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 disabled:bg-gray-300"
-                            disabled={loading}
-                        >
-                            Randomize
-                        </button>
-                    </div>
-                </form>
-            );
-        };
-
-        const RecommendationResult = () => {
-            const { recommendation, loading, error, API_KEY } = React.useContext(AppContext);
-
-            if (error) {
-                return (
-                    <div className="mt-10 text-center text-red-500 font-semibold p-4 bg-white rounded-xl shadow-md max-w-2xl mx-auto">
-                        {error}
-                    </div>
-                );
-            }
-
-            if (loading) {
-                return (
-                    <div className="mt-10 flex justify-center">
-                        <div className="loading-spinner h-12 w-12 border-4 border-gray-300 border-t-indigo-500 rounded-full animate-spin"></div>
-                    </div>
-                );
-            }
-
-            if (!recommendation) {
-                return (
-                    <div className="mt-10 text-center text-gray-500 font-semibold max-w-2xl mx-auto">
-                        <p>Use the search bar or hit "Randomize" to find your next great watch!</p>
-                        {!API_KEY && (
-                            <p className="mt-4 text-sm text-red-400">
-                                *Note: Please add your TMDb API key to the `API_KEY` constant in the code to make this work.
-                            </p>
-                        )}
-                    </div>
-                );
-            }
-
-            return (
-                <div className="mt-10 w-full max-w-4xl mx-auto animate-fade-in">
-                    <div className="bg-white p-6 md:p-8 rounded-2xl shadow-xl flex flex-col md:flex-row items-center md:items-start gap-6">
-                        <img
-                            src={recommendation.poster}
-                            alt={recommendation.title}
-                            className="w-full md:w-1/3 rounded-xl shadow-md object-cover"
-                            onError={(e) => { e.target.src = 'https://placehold.co/500x750/334155/fff?text=No+Poster'; }}
-                        />
-                        <div className="flex-1 text-center md:text-left">
-                            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{recommendation.title}</h2>
-                            <p className="text-sm font-semibold text-gray-500 mb-2">({recommendation.year})</p>
-                            <p className="text-gray-700 leading-relaxed mb-4">{recommendation.summary}</p>
-                            <div className="flex flex-wrap gap-2 justify-center md:justify-start">
-                                <span className="px-3 py-1 rounded-full text-xs font-semibold text-white bg-indigo-500">{recommendation.mediaType}</span>
-                                <span className="px-3 py-1 rounded-full text-xs font-semibold text-white bg-green-500">{recommendation.genres}</span>
-                            </div>
-                        </div>
-                    </div>
+          {media && !loading && !error && (
+            <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-6 sm:space-y-0 sm:space-x-8 max-w-3xl bg-gray-700 p-6 rounded-xl shadow-lg">
+              <div className="flex-shrink-0">
+                {media.poster_path ? (
+                  <img
+                    src={`https://image.tmdb.org/t/p/w500${media.poster_path}`}
+                    alt={media.title || media.name}
+                    className="w-48 h-auto rounded-lg shadow-xl"
+                  />
+                ) : (
+                  <div className="w-48 h-72 bg-gray-600 rounded-lg flex items-center justify-center text-gray-400 text-sm text-center p-4">
+                    Poster Not Available
+                  </div>
+                )}
+              </div>
+              <div className="flex-grow text-left">
+                <h2 className="text-3xl font-bold text-blue-300 mb-2">{media.title || media.name}</h2>
+                <div className="text-gray-400 text-sm mb-4">
+                  <span className="bg-gray-600 px-2 py-1 rounded-full">{media.media_type === 'movie' ? 'Movie' : 'TV Show'}</span>
+                  <span className="ml-2">({getYear(media.release_date || media.first_air_date)})</span>
                 </div>
-            );
-        };
+                <p className="text-gray-300 mb-4 leading-relaxed">
+                  {media.overview || 'No summary available.'}
+                </p>
+                {media.genres && media.genres.length > 0 && (
+                  <div className="flex flex-wrap gap-2 text-sm">
+                    {media.genres.map((genre, index) => (
+                      <span key={index} className="bg-gray-600 text-white px-3 py-1 rounded-full">
+                        {genre}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
-        ReactDOM.render(React.createElement(App), document.getElementById('root'));
-    </script>
-</body>
-</html>
+export default App;

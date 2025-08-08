@@ -1,220 +1,247 @@
-import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-
-// The main application component.
-const App = () => {
-  // Your TMDb API key.
-  const API_KEY = "24a71141954141554e65756b4f7e27f0";
-
-  // State variables for the app.
-  const [media, setMedia] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [language, setLanguage] = useState('en-US');
-  const [query, setQuery] = useState('');
-
-  // A list of supported language options for the API.
-  const LANGUAGE_OPTIONS = [
-    { code: 'en-US', name: 'English' },
-    { code: 'es-US', name: 'Spanish' },
-    { code: 'de-DE', name: 'German' },
-    { code: 'fr-FR', name: 'French' },
-    { code: 'ja-JP', name: 'Japanese' },
-    { code: 'ko-KR', name: 'Korean' },
-    { code: 'zh-CN', name: 'Chinese' },
-  ];
-
-  // Function to fetch media data from the TMDb API.
-  const fetchData = async (isRandom = false) => {
-    setLoading(true);
-    setError(null);
-
-    let apiUrl = '';
-    const randomPage = Math.floor(Math.random() * 50) + 1; // Get a random page for a more diverse selection.
-
-    try {
-      if (isRandom || !query) {
-        // Fetch a random popular movie or TV show.
-        const type = Math.random() > 0.5 ? 'movie' : 'tv';
-        apiUrl = `https://api.themoviedb.org/3/discover/${type}?api_key=${API_KEY}&language=${language}&sort_by=popularity.desc&page=${randomPage}`;
-      } else {
-        // Search for a specific movie or TV show.
-        apiUrl = `https://api.themoviedb.org/3/search/multi?api_key=${API_KEY}&query=${encodeURIComponent(query)}&language=${language}`;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What to watch today</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter font -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap">
+    <!-- React, ReactDOM, and Babel CDNs -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
       }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
 
-      const response = await fetch(apiUrl);
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-
-      const data = await response.json();
-      let result = null;
-
-      if (data.results && data.results.length > 0) {
-        if (isRandom || !query) {
-          // Pick a random item from the results of the popular list.
-          const randomIndex = Math.floor(Math.random() * data.results.length);
-          result = data.results[randomIndex];
-        } else {
-          // For a search query, just take the first result.
-          result = data.results[0];
-        }
-      }
-
-      if (result) {
-        // Fetch genre data separately for display.
-        const genreType = result.media_type === 'movie' ? 'movie' : 'tv';
-        const genresResponse = await fetch(`https://api.themoviedb.org/3/genre/${genreType}/list?api_key=${API_KEY}&language=${language}`);
-        const genresData = await genresResponse.json();
+    <script type="text/babel">
+        // The main application component.
+        const App = () => {
+          // Your TMDb API key.
+          const API_KEY = "24a71141954141554e65756b4f7e27f0";
         
-        // Map genre IDs to their names.
-        const genreNames = result.genre_ids?.map(id => {
-          const genre = genresData.genres.find(g => g.id === id);
-          return genre ? genre.name : '';
-        }).filter(Boolean);
+          // State variables for the app.
+          const [media, setMedia] = useState(null);
+          const [loading, setLoading] = useState(false);
+          const [error, setError] = useState(null);
+          const [language, setLanguage] = useState('en-US');
+          const [query, setQuery] = useState('');
         
-        setMedia({ ...result, genres: genreNames });
-      } else {
-        setMedia(null);
-        setError("No results found. Please try another query or randomize again.");
-      }
-
-    } catch (err) {
-      setError(`Failed to fetch data: ${err.message}`);
-      setMedia(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch initial random data when the component mounts or language changes.
-  useEffect(() => {
-    fetchData(true);
-  }, [language]);
-
-  // Handle the button click for fetching new data.
-  const handleRandomize = () => {
-    setQuery('');
-    fetchData(true);
-  };
-
-  // Handle search form submission.
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (query.trim()) {
-      fetchData();
-    }
-  };
-
-  // Handle change in the language selector.
-  const handleLanguageChange = (e) => {
-    setLanguage(e.target.value);
-  };
-
-  const getYear = (releaseDate) => {
-    return releaseDate ? new Date(releaseDate).getFullYear() : 'N/A';
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-900 text-white p-4 font-sans flex flex-col items-center">
-      <div className="w-full max-w-4xl p-6 bg-gray-800 rounded-xl shadow-lg">
-        <header className="text-center mb-8">
-          <h1 className="text-4xl font-extrabold text-blue-400">What to watch today</h1>
-          <p className="mt-2 text-lg text-gray-300">Discover your next favorite movie or TV show.</p>
-        </header>
-
-        {/* Search and controls section */}
-        <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4 mb-8">
-          <form onSubmit={handleSearch} className="flex flex-grow w-full sm:w-auto">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search for a title..."
-              className="flex-grow p-3 rounded-l-md border border-gray-600 bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              type="submit"
-              className="p-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-r-md transition-colors duration-200"
-            >
-              Search
-            </button>
-          </form>
-
-          <select
-            value={language}
-            onChange={handleLanguageChange}
-            className="p-3 rounded-md border border-gray-600 bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
-          >
-            {LANGUAGE_OPTIONS.map(option => (
-              <option key={option.code} value={option.code}>{option.name}</option>
-            ))}
-          </select>
-
-          <button
-            onClick={handleRandomize}
-            className="p-3 w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-md transition-colors duration-200 shadow-md"
-          >
-            Randomize
-          </button>
-        </div>
-
-        {/* Display section for results, loading, or errors */}
-        <div className="min-h-[300px] flex items-center justify-center text-center">
-          {loading && (
-            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div>
-          )}
-
-          {error && !loading && (
-            <div className="text-red-400 p-4 bg-red-900 rounded-lg max-w-xl">
-              <p className="font-semibold text-lg">Error:</p>
-              <p>{error}</p>
-              <p className="mt-2 text-sm text-red-300">
-                Please check your API key and network connection.
-              </p>
-            </div>
-          )}
-
-          {media && !loading && !error && (
-            <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-6 sm:space-y-0 sm:space-x-8 max-w-3xl bg-gray-700 p-6 rounded-xl shadow-lg">
-              <div className="flex-shrink-0">
-                {media.poster_path ? (
-                  <img
-                    src={`https://image.tmdb.org/t/p/w500${media.poster_path}`}
-                    alt={media.title || media.name}
-                    className="w-48 h-auto rounded-lg shadow-xl"
-                  />
-                ) : (
-                  <div className="w-48 h-72 bg-gray-600 rounded-lg flex items-center justify-center text-gray-400 text-sm text-center p-4">
-                    Poster Not Available
-                  </div>
-                )}
-              </div>
-              <div className="flex-grow text-left">
-                <h2 className="text-3xl font-bold text-blue-300 mb-2">{media.title || media.name}</h2>
-                <div className="text-gray-400 text-sm mb-4">
-                  <span className="bg-gray-600 px-2 py-1 rounded-full">{media.media_type === 'movie' ? 'Movie' : 'TV Show'}</span>
-                  <span className="ml-2">({getYear(media.release_date || media.first_air_date)})</span>
-                </div>
-                <p className="text-gray-300 mb-4 leading-relaxed">
-                  {media.overview || 'No summary available.'}
-                </p>
-                {media.genres && media.genres.length > 0 && (
-                  <div className="flex flex-wrap gap-2 text-sm">
-                    {media.genres.map((genre, index) => (
-                      <span key={index} className="bg-gray-600 text-white px-3 py-1 rounded-full">
-                        {genre}
-                      </span>
+          // A list of supported language options for the API.
+          const LANGUAGE_OPTIONS = [
+            { code: 'en-US', name: 'English' },
+            { code: 'es-US', name: 'Spanish' },
+            { code: 'de-DE', name: 'German' },
+            { code: 'fr-FR', name: 'French' },
+            { code: 'ja-JP', name: 'Japanese' },
+            { code: 'ko-KR', name: 'Korean' },
+            { code: 'zh-CN', name: 'Chinese' },
+          ];
+        
+          // Function to fetch media data from the TMDb API.
+          const fetchData = async (isRandom = false) => {
+            setLoading(true);
+            setError(null);
+        
+            let apiUrl = '';
+            const randomPage = Math.floor(Math.random() * 50) + 1; // Get a random page for a more diverse selection.
+        
+            try {
+              if (isRandom || !query) {
+                // Fetch a random popular movie or TV show.
+                const type = Math.random() > 0.5 ? 'movie' : 'tv';
+                apiUrl = `https://api.themoviedb.org/3/discover/${type}?api_key=${API_KEY}&language=${language}&sort_by=popularity.desc&page=${randomPage}`;
+              } else {
+                // Search for a specific movie or TV show.
+                apiUrl = `https://api.themoviedb.org/3/search/multi?api_key=${API_KEY}&query=${encodeURIComponent(query)}&language=${language}`;
+              }
+        
+              const response = await fetch(apiUrl);
+              if (!response.ok) {
+                throw new Error('Network response was not ok');
+              }
+        
+              const data = await response.json();
+              let result = null;
+        
+              if (data.results && data.results.length > 0) {
+                if (isRandom || !query) {
+                  // Pick a random item from the results of the popular list.
+                  const randomIndex = Math.floor(Math.random() * data.results.length);
+                  result = data.results[randomIndex];
+                } else {
+                  // For a search query, just take the first result.
+                  result = data.results[0];
+                }
+              }
+        
+              if (result) {
+                // Fetch genre data separately for display.
+                const genreType = result.media_type === 'movie' ? 'movie' : 'tv';
+                const genresResponse = await fetch(`https://api.themoviedb.org/3/genre/${genreType}/list?api_key=${API_KEY}&language=${language}`);
+                const genresData = await genresResponse.json();
+                
+                // Map genre IDs to their names.
+                const genreNames = result.genre_ids?.map(id => {
+                  const genre = genresData.genres.find(g => g.id === id);
+                  return genre ? genre.name : '';
+                }).filter(Boolean);
+                
+                setMedia({ ...result, genres: genreNames });
+              } else {
+                setMedia(null);
+                setError("No results found. Please try another query or randomize again.");
+              }
+        
+            } catch (err) {
+              setError(`Failed to fetch data: ${err.message}`);
+              setMedia(null);
+            } finally {
+              setLoading(false);
+            }
+          };
+        
+          // Fetch initial random data when the component mounts or language changes.
+          useEffect(() => {
+            fetchData(true);
+          }, [language]);
+        
+          // Handle the button click for fetching new data.
+          const handleRandomize = () => {
+            setQuery('');
+            fetchData(true);
+          };
+        
+          // Handle search form submission.
+          const handleSearch = (e) => {
+            e.preventDefault();
+            if (query.trim()) {
+              fetchData();
+            }
+          };
+        
+          // Handle change in the language selector.
+          const handleLanguageChange = (e) => {
+            setLanguage(e.target.value);
+          };
+        
+          const getYear = (releaseDate) => {
+            return releaseDate ? new Date(releaseDate).getFullYear() : 'N/A';
+          };
+        
+          return (
+            <div className="min-h-screen bg-gray-900 text-white p-4 font-sans flex flex-col items-center">
+              <div className="w-full max-w-4xl p-6 bg-gray-800 rounded-xl shadow-lg">
+                <header className="text-center mb-8">
+                  <h1 className="text-4xl font-extrabold text-blue-400">What to watch today</h1>
+                  <p className="mt-2 text-lg text-gray-300">Discover your next favorite movie or TV show.</p>
+                </header>
+        
+                {/* Search and controls section */}
+                <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4 mb-8">
+                  <form onSubmit={handleSearch} className="flex flex-grow w-full sm:w-auto">
+                    <input
+                      type="text"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search for a title..."
+                      className="flex-grow p-3 rounded-l-md border border-gray-600 bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="submit"
+                      className="p-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-r-md transition-colors duration-200"
+                    >
+                      Search
+                    </button>
+                  </form>
+        
+                  <select
+                    value={language}
+                    onChange={handleLanguageChange}
+                    className="p-3 rounded-md border border-gray-600 bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
+                  >
+                    {LANGUAGE_OPTIONS.map(option => (
+                      <option key={option.code} value={option.code}>{option.name}</option>
                     ))}
-                  </div>
-                )}
+                  </select>
+        
+                  <button
+                    onClick={handleRandomize}
+                    className="p-3 w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-md transition-colors duration-200 shadow-md"
+                  >
+                    Randomize
+                  </button>
+                </div>
+        
+                {/* Display section for results, loading, or errors */}
+                <div className="min-h-[300px] flex items-center justify-center text-center">
+                  {loading && (
+                    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div>
+                  )}
+        
+                  {error && !loading && (
+                    <div className="text-red-400 p-4 bg-red-900 rounded-lg max-w-xl">
+                      <p className="font-semibold text-lg">Error:</p>
+                      <p>{error}</p>
+                      <p className="mt-2 text-sm text-red-300">
+                        Please check your API key and network connection.
+                      </p>
+                    </div>
+                  )}
+        
+                  {media && !loading && !error && (
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-6 sm:space-y-0 sm:space-x-8 max-w-3xl bg-gray-700 p-6 rounded-xl shadow-lg">
+                      <div className="flex-shrink-0">
+                        {media.poster_path ? (
+                          <img
+                            src={`https://image.tmdb.org/t/p/w500${media.poster_path}`}
+                            alt={media.title || media.name}
+                            className="w-48 h-auto rounded-lg shadow-xl"
+                          />
+                        ) : (
+                          <div className="w-48 h-72 bg-gray-600 rounded-lg flex items-center justify-center text-gray-400 text-sm text-center p-4">
+                            Poster Not Available
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-grow text-left">
+                        <h2 className="text-3xl font-bold text-blue-300 mb-2">{media.title || media.name}</h2>
+                        <div className="text-gray-400 text-sm mb-4">
+                          <span className="bg-gray-600 px-2 py-1 rounded-full">{media.media_type === 'movie' ? 'Movie' : 'TV Show'}</span>
+                          <span className="ml-2">({getYear(media.release_date || media.first_air_date)})</span>
+                        </div>
+                        <p className="text-gray-300 mb-4 leading-relaxed">
+                          {media.overview || 'No summary available.'}
+                        </p>
+                        {media.genres && media.genres.length > 0 && (
+                          <div className="flex flex-wrap gap-2 text-sm">
+                            {media.genres.map((genre, index) => (
+                              <span key={index} className="bg-gray-600 text-white px-3 py-1 rounded-full">
+                                {genre}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default App;
+          );
+        };
+        
+        // Render the App component into the root div.
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
